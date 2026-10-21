@@ -2,10 +2,11 @@
 
 import json
 from collections.abc import Iterator
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pypdf.errors import PdfReadError
 
 from app.conhecimento import BaseDeConhecimento
@@ -25,6 +26,15 @@ base = BaseDeConhecimento(criar_provedor())
 def obter_base() -> BaseDeConhecimento:
     """Dependência injetada nas rotas. Nos testes ela é trocada por uma base com FakeIA."""
     return base
+
+
+PAGINA_INICIAL = Path(__file__).parent / "static" / "index.html"
+
+
+@app.get("/", include_in_schema=False)
+def pagina_inicial() -> FileResponse:
+    """Tela simples para enviar o edital e conversar com ele pelo navegador."""
+    return FileResponse(PAGINA_INICIAL)
 
 
 @app.get("/health")

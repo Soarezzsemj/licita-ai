@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>licita-ai</title>
+  <style>
+    :root {
+      --fundo: #f6f7f9;
+      --cartao: #ffffff;
+      --texto: #1c1f24;
+      --suave: #66707d;
+      --borda: #dde1e6;
+      --destaque: #2457c5;
+      --destaque-texto: #ffffff;
+      --minha-msg: #e8eefb;
+      --erro: #b42318;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fundo: #14161a;
+        --cartao: #1d2026;
+        --texto: #e6e8eb;
+        --suave: #9aa3ae;
+        --borda: #30343c;
+        --destaque: #6b9bff;
+        --destaque-texto: #0d1220;
+        --minha-msg: #23314f;
+        --erro: #ff8a80;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--fundo);
+      color: var(--texto);
+      font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 100vh;
+    }
+    h1 { margin: 0; font-size: 1.5rem; }
+    .subtitulo { margin: 4px 0 0; color: var(--suave); }
+    .cartao {
+      background: var(--cartao);
+      border: 1px solid var(--borda);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .linha { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    input[type="file"] { flex: 1; min-width: 0; color: var(--suave); }
+    input[type="text"] {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 12px;
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      background: var(--fundo);
+      color: var(--texto);
+      font: inherit;
+    }
+    button {
+      padding: 10px 16px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--destaque);
+      color: var(--destaque-texto);
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .status { margin: 8px 0 0; font-size: 0.9rem; color: var(--suave); }
+    .status.erro { color: var(--erro); }
+    #conversa {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .vazio { color: var(--suave); text-align: center; margin: auto 0; }
+    .msg {
+      padding: 12px 14px;
+      border-radius: 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .msg.eu { align-self: flex-end; max-width: 85%; background: var(--minha-msg); }
+    .msg.ia { background: var(--cartao); border: 1px solid var(--borda); }
+    .msg.erro { color: var(--erro); }
+    .fontes { margin-top: 8px; font-size: 0.85rem; color: var(--suave); }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>licita-ai</h1>
+      <p class="subtitulo">Envie um edital em PDF e faça perguntas sobre ele.</p>
+    </header>
+
+    <form id="form-upload" class="cartao">
+      <div class="linha">
+        <input type="file" id="arquivo" accept="application/pdf,.pdf" required>
+        <button type="submit" id="botao-upload">Enviar edital</button>
+      </div>
+      <p class="status" id="status-upload">Nenhum edital enviado.</p>
+    </form>
+
+    <section id="conversa">
+      <p class="vazio" id="vazio">As perguntas e respostas aparecem aqui.</p>
+    </section>
+
+    <form id="form-pergunta" class="cartao linha">
+      <input type="text" id="pergunta" placeholder="Ex.: Qual o prazo de entrega?"
+             minlength="5" maxlength="500" required disabled>
+      <button type="submit" id="botao-perguntar" disabled>Perguntar</button>
+    </form>
+  </main>
+
+  <script>
+    const formUpload = document.getElementById("form-upload");
+    const statusUpload = document.getElementById("status-upload");
+    const botaoUpload = document.getElementById("botao-upload");
+    const formPergunta = document.getElementById("form-pergunta");
+    const campoPergunta = document.getElementById("pergunta");
+    const botaoPerguntar = document.getElementById("botao-perguntar");
+    const conversa = document.getElementById("conversa");
+
+    function mostrarStatus(texto, erro = false) {
+      statusUpload.textContent = texto;
+      statusUpload.classList.toggle("erro", erro);
+    }
+
+    function liberarPerguntas(liberar) {
+      campoPergunta.disabled = !liberar;
+      botaoPerguntar.disabled = !liberar;
+    }
+
+    function adicionarMensagem(classe, texto = "") {
+      document.getElementById("vazio")?.remove();
+      const div = document.createElement("div");
+      div.className = "msg " + classe;
+      div.textContent = texto;
+      conversa.appendChild(div);
+      div.scrollIntoView({ behavior: "smooth", block: "end" });
+      return div;
+    }
+
+    // A API devolve {"detail": "..."} nos erros; no 422 o detail é uma lista.
+    async function lerErro(resposta) {
+      try {
+        const corpo = await resposta.json();
+        if (typeof corpo.detail === "string") return corpo.detail;
+      } catch {}
+      if (resposta.status === 422) return "A pergunta deve ter entre 5 e 500 caracteres.";
+      return "Erro " + resposta.status + ".";
+    }
+
+    formUpload.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const arquivo = document.getElementById("arquivo").files[0];
+      if (!arquivo) return;
+      const dados = new FormData();
+      dados.append("arquivo", arquivo);
+      botaoUpload.disabled = true;
+      mostrarStatus("Indexando " + arquivo.name + "...");
+      try {
+        const resposta = await fetch("/documentos", { method: "POST", body: dados });
+        if (!resposta.ok) {
+          mostrarStatus(await lerErro(resposta), true);
+          return;
+        }
+        const corpo = await resposta.json();
+        mostrarStatus("Edital ativo: " + corpo.arquivo + " (" + corpo.trechos + " trechos).");
+        liberarPerguntas(true);
+        campoPergunta.focus();
+      } catch {
+        mostrarStatus("Não consegui falar com a API.", true);
+      } finally {
+        botaoUpload.disabled = false;
+      }
+    });
+
+    // Lê os eventos SSE de /perguntas/stream. Não dá para usar EventSource
+    // porque ele só faz GET, e a rota é POST.
+    async function lerEventos(resposta, aoReceber) {
+      const leitor = resposta.body.getReader();
+      const decodificador = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await leitor.read();
+        if (done) break;
+        buffer += decodificador.decode(value, { stream: true });
+        // Cada evento termina com uma linha em branco.
+        let fim;
+        while ((fim = buffer.indexOf("\n\n")) !== -1) {
+          const bloco = buffer.slice(0, fim);
+          buffer = buffer.slice(fim + 2);
+          let nome = "message";
+          let dados = "";
+          for (const linha of bloco.split("\n")) {
+            if (linha.startsWith("event: ")) nome = linha.slice(7);
+            else if (linha.startsWith("data: ")) dados += linha.slice(6);
+          }
+          aoReceber(nome, JSON.parse(dados));
+        }
+      }
+    }
+
+    formPergunta.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const pergunta = campoPergunta.value.trim();
+      if (pergunta.length < 5) return;
+      adicionarMensagem("eu", pergunta);
+      campoPergunta.value = "";
+      liberarPerguntas(false);
+      const balao = adicionarMensagem("ia", "...");
+      let recebeuTexto = false;
+      try {
+        const resposta = await fetch("/perguntas/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pergunta }),
+        });
+        if (!resposta.ok) {
+          balao.textContent = await lerErro(resposta);
+          balao.classList.add("erro");
+          if (resposta.status === 404) {
+            mostrarStatus("Nenhum edital enviado.", true);
+          }
+          return;
+        }
+        await lerEventos(resposta, (nome, dados) => {
+          if (nome === "texto") {
+            if (!recebeuTexto) balao.textContent = "";
+            recebeuTexto = true;
+            balao.textContent += dados.texto;
+          } else if (nome === "paginas") {
+            const fontes = document.createElement("div");
+            fontes.className = "fontes";
+            fontes.textContent = "Fontes: página" + (dados.paginas.length > 1 ? "s " : " ")
+              + dados.paginas.join(", ");
+            balao.appendChild(fontes);
+          } else if (nome === "erro") {
+            balao.textContent = dados.detalhe;
+            balao.classList.add("erro");
+          }
+          balao.scrollIntoView({ behavior: "smooth", block: "end" });
+        });
+      } catch {
+        balao.textContent = "Não consegui falar com a API.";
+        balao.classList.add("erro");
+      } finally {
+        liberarPerguntas(true);
+        campoPergunta.focus();
+      }
+    });
+  </script>
+</body>
+</html>

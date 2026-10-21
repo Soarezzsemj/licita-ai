@@ -6,7 +6,7 @@ Assistente que responde perguntas sobre **editais de licitação em PDF**, usand
 Você envia o edital, pergunta "Qual o prazo de entrega?" e recebe a resposta, gerada
 **somente** a partir do texto do edital, junto com as páginas usadas como fonte.
 
-**Stack:** Python 3.12 · FastAPI · Pydantic · pypdf · Qdrant (em memória) · Google Gemini · pytest · Docker
+**Stack:** Python 3.10+ · FastAPI · Pydantic · pypdf · Qdrant (em memória) · Google Gemini · pytest · Docker
 
 ## Como funciona
 
@@ -38,25 +38,84 @@ Você envia o edital, pergunta "Qual o prazo de entrega?" e recebe a resposta, g
 | `app/ia.py` | `ProvedorIA` (abstrata), `GeminiIA`, `FakeIA` e montagem do prompt |
 | `app/conhecimento.py` | `BaseDeConhecimento`: guarda e busca trechos no Qdrant |
 | `app/schemas.py` | Modelos Pydantic de entrada e saída |
-| `tests/test_api.py` | 8 testes com pytest usando a `FakeIA` |
+| `app/static/index.html` | Tela simples servida em `/` (HTML + JS puro, usa o streaming) |
+| `tests/test_api.py` | 9 testes com pytest usando a `FakeIA` |
 
 ## Como rodar
 
-### Localmente
+### Localmente (passo a passo)
+
+Precisa do **Python 3.10 ou mais novo** instalado (`python --version` para conferir).
+
+**1. Entre na pasta do projeto**
+
+```bash
+cd licita-ai
+```
+
+**2. Crie o ambiente virtual (só na primeira vez)**
 
 ```bash
 python -m venv .venv
-# Windows: .venv\Scripts\Activate.ps1   |   Linux/Mac: source .venv/bin/activate
+```
+
+**3. Ative o ambiente virtual**
+
+```powershell
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+```
+
+```bash
+# Linux/Mac
+source .venv/bin/activate
+```
+
+Vai aparecer `(.venv)` no começo da linha do terminal.
+
+> **Windows:** se aparecer "a execução de scripts foi desabilitada neste sistema", rode
+> uma vez `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` (responda `S`) e tente de novo.
+
+**4. Instale as dependências (só na primeira vez)**
+
+```bash
 pip install -r requirements.txt
+```
+
+**5. Suba o servidor**
+
+```bash
 uvicorn app.main:app --reload
 ```
 
-Abra http://localhost:8000/docs para testar pela documentação interativa (Swagger).
+Espere aparecer `Uvicorn running on http://127.0.0.1:8000` e deixe esse terminal aberto.
+O `--reload` reinicia o servidor sozinho quando o código muda.
+
+**6. Abra no navegador**
+
+- http://localhost:8000: a tela para enviar o edital e fazer perguntas
+- http://localhost:8000/docs: a documentação interativa (Swagger), para testar os endpoints
+
+**7. Para parar:** `Ctrl+C` no terminal.
+
+Da próxima vez, basta repetir os passos 1, 3 e 5.
+
+#### Modo fake x Gemini
 
 - **Sem chave (modo fake):** é só rodar. Os embeddings são feitos a partir das palavras
   e o "LLM" devolve os trechos encontrados. Não precisa de internet.
-- **Com chave (Gemini):** copie `.env.example` para `.env` e preencha `GEMINI_API_KEY`
-  (gere em https://aistudio.google.com/apikey). Reinicie a API.
+- **Com chave (Gemini):** gere uma chave em https://aistudio.google.com/apikey, copie
+  `.env.example` para `.env` (`copy .env.example .env` no Windows, `cp .env.example .env`
+  no Linux/Mac), preencha `GEMINI_API_KEY=sua_chave` e reinicie o servidor.
+
+#### Problemas comuns
+
+| Erro | Solução |
+|---|---|
+| `uvicorn` não é reconhecido como comando | O ambiente virtual não está ativado: refaça o passo 3, ou rode `python -m uvicorn app.main:app --reload` |
+| "a execução de scripts foi desabilitada" | Veja a observação do passo 3 |
+| Porta em uso (erro `10048` no Windows) | Já tem outro servidor na porta 8000: feche-o ou use `--port 8001` |
+| "Envie um edital antes de perguntar" | O servidor reiniciou e o edital sumiu da memória: envie o PDF de novo |
 
 ### Com Docker
 
@@ -67,6 +126,8 @@ docker run -p 8000:8000 --env-file .env licita-ai  # com Gemini
 ```
 
 ### Testes
+
+Com o ambiente virtual ativado:
 
 ```bash
 pytest

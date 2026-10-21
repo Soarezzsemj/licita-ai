@@ -51,6 +51,12 @@ def test_health(cliente: TestClient) -> None:
     assert resposta.json() == {"status": "ok"}
 
 
+def test_pagina_inicial_e_html(cliente: TestClient) -> None:
+    resposta = cliente.get("/")
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"].startswith("text/html")
+
+
 def test_chunking_com_sobreposicao() -> None:
     # 1500 caracteres -> trechos começando em 0, 650 e 1300
     texto = "".join(str(i % 10) for i in range(1500))
