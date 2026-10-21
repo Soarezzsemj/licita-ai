@@ -1,0 +1,14 @@
+fastapi>=0.115
+uvicorn>=0.30
+# Necessário para o FastAPI receber arquivos (multipart/form-data)
+python-multipart>=0.0.9
+pydantic>=2.7
+pypdf>=5.0
+qdrant-client>=1.12
+google-genai>=1.0
+python-dotenv>=1.0
+pytest>=8.0
+# Usado pelo TestClient do FastAPI nos testes
+httpx2
+# Gera PDFs pequenos dentro dos testes
+fpdf2>=2.8
